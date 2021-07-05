@@ -14,32 +14,51 @@ namespace Mailer.Controllers
     public class SenderController : ControllerBase
     {
         private readonly ILogger<SenderController> _logger;
+
+        static MailAddress senderAddress = new("ken.abaragi@gmail.com");
+        static string password = "12qw34er56ty";
+        private NetworkCredential sender = new(senderAddress.Address, password);
         public SenderController(ILogger<SenderController> logger)
         {
             _logger = logger;
         }
-
+        [HttpGet]
+        public bool Get(string login, string p)
+        {
+            bool resultInfo;
+            try
+            {
+                MailAddress mail = new(login);
+                senderAddress = mail;
+                password = p;
+                resultInfo = true;
+            }
+            catch (Exception e)
+            {
+                _logger.LogError(e.Message);
+                resultInfo = false;
+            }
+            return resultInfo;
+        }
         [HttpGet]
         public SendStatus[] Get(string messageText, string messageSubject, string recipients)
         {
             string[] addresses = System.IO.File.ReadAllLines(@$"{recipients}");
             SendStatus[] sendStatuses = new SendStatus[addresses.Length];
             int sendedCount = 0;
+            var smtp = new SmtpClient
+            {
+                Host = "smtp.gmail.com",
+                Port = 587,
+                EnableSsl = true,
+                DeliveryMethod = SmtpDeliveryMethod.Network,
+                Credentials = sender,
+                Timeout = 20000
+            };
             foreach (var item in addresses)
             {
-                var fromAddress = new MailAddress("ken.abaragi@gmail.com");
-                var toAddress = new MailAddress(item);
-                string password = "12qw34er56ty";
-                var smtp = new SmtpClient
-                {
-                    Host = "smtp.gmail.com",
-                    Port = 587,
-                    EnableSsl = true,
-                    DeliveryMethod = SmtpDeliveryMethod.Network,
-                    Credentials = new NetworkCredential(fromAddress.Address, password),
-                    Timeout = 20000
-                };
-                var message = new MailMessage(fromAddress, toAddress)
+                MailAddress toAddress = new(item);
+                MailMessage message = new(senderAddress, toAddress)
                 {
                     Subject = messageSubject,
                     Body = messageText
