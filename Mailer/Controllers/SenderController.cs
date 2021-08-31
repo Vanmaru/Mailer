@@ -1,4 +1,7 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Mailer.Models;
+using Mailer.Repositories;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
@@ -6,80 +9,114 @@ using System.Linq;
 using System.Net;
 using System.Net.Mail;
 using System.Threading.Tasks;
-
 namespace Mailer.Controllers
 {
+    [Route("api/[controller]")]
     [ApiController]
-    [Route("[controller]")]
     public class SenderController : ControllerBase
     {
-        private readonly ILogger<SenderController> _logger;
+        private readonly ISendingRepository _sendingRepository;
 
         static MailAddress senderAddress = new("ken.abaragi@gmail.com");
-        static string password = "12qw34er56ty";
-        private NetworkCredential sender = new(senderAddress.Address, password);
-        public SenderController(ILogger<SenderController> logger)
+        static string _password = "12qw34er56ty";
+        private NetworkCredential sender = new(senderAddress.Address, _password);
+        public SenderController(ISendingRepository sendingRepository)
         {
-            _logger = logger;
+            _sendingRepository = sendingRepository;
         }
-        [HttpGet]
-        public bool Get(string login, string p)
+        [HttpGet("{login}")]
+        public string Get(string login, string password)
         {
-            bool resultInfo;
             try
             {
                 MailAddress mail = new(login);
                 senderAddress = mail;
-                password = p;
-                resultInfo = true;
+                _password = password;
+                NetworkCredential credential = new(login, password);
+                sender = credential;
             }
             catch (Exception e)
             {
-                _logger.LogError(e.Message);
-                resultInfo = false;
+                return e.Message;
             }
-            return resultInfo;
+            return "Logged in";
         }
         [HttpGet]
-        public SendStatus[] Get(string messageText, string messageSubject, string recipients)
+        public async Task<IEnumerable<SendStatus>> GetSendingInfo()
         {
-            string[] addresses = System.IO.File.ReadAllLines(@$"{recipients}");
-            SendStatus[] sendStatuses = new SendStatus[addresses.Length];
-            int sendedCount = 0;
-            var smtp = new SmtpClient
-            {
-                Host = "smtp.gmail.com",
-                Port = 587,
-                EnableSsl = true,
-                DeliveryMethod = SmtpDeliveryMethod.Network,
-                Credentials = sender,
-                Timeout = 20000
-            };
-            foreach (var item in addresses)
-            {
-                MailAddress toAddress = new(item);
-                MailMessage message = new(senderAddress, toAddress)
-                {
-                    Subject = messageSubject,
-                    Body = messageText
-                };
-                bool res = true;
-                try
-                {
-                    smtp.Send(message);
-                }
-                catch (Exception e)
-                {
-                    res = false;
-                    throw new SmtpException("email not sent", e);
-                }
-                sendStatuses[sendedCount] = new SendStatus
-                {
-                    Result = res,
-                    Recipient = toAddress.Address
-                };
-            }
-            return sendStatuses;
+            return await _sendingRepository.Get();
         }
+        [HttpGet("{id}")]
+        public async Task<ActionResult<SendStatus>> GetSendingInfo(int id)
+        {
+            return await _sendingRepository.Get(id);
+        }
+        [HttpPost]
+        public async Task<ActionResult<SendStatus>> PostSending([FromBody]SendStatus sendStatus)
+        {
+            var newSending = await _sendingRepository.Create(sendStatus);
+            return CreatedAtAction(nameof(GetSendingInfo), new { id = newSending.Id }, newSending);
+        }
+        //[HttpDelete]
+        //public async Task<ActionResult> Delete(int id)
+        //{
+        //    var toDelete = await _sendingRepository.Delete(id); //Broken
+        //    if (toDelete==true)
+        //    {
+        //        return NotFound();
+        //    }
+        //    await _sendingRepository.Delete(toDelete.Id);
+        //    return NoContent();
+        //}
+        //[HttpPost("{message}")]
+        //public async Task<IEnumerable<SendStatus>> PostMessage(string messageText, string messageSubject, string recipients)
+        //{
+        //    var smtp = new SmtpClient
+        //    {
+        //        Host = "smtp.gmail.com",
+        //        Port = 587,
+        //        EnableSsl = true,
+        //        DeliveryMethod = SmtpDeliveryMethod.Network,
+        //        Credentials = sender,
+        //        Timeout = 20000
+        //    };
+            
+        //    using (SendingContext db = new())
+        //    {
+        //        foreach (var item in addresses)
+        //        {
+        //            MailAddress toAddress = new(item);
+        //            MailMessage message = new(senderAddress, toAddress)
+        //            {
+        //                Subject = messageSubject,
+        //                Body = messageText
+        //            };
+        //            bool res = true;
+        //            sendStatuses[sendedCount] = new SendStatus
+        //            {
+        //                Id = sendedCount + 1,
+        //                Result = res,
+        //                Recipient = toAddress.Address
+        //            };
+        //            db.Sendings.Add(sendStatuses[sendedCount]);
+        //            db.SaveChanges();
+        //            //sendStatuses[sendedCount].Status = Status.Sending;
+        //            try
+        //            {
+        //                smtp.Send(message);
+        //                //sendStatuses[sendedCount].Status = Status.Sended;
+        //            }
+        //            catch (Exception e)
+        //            {
+        //                res = false;
+        //                //sendStatuses[sendedCount].Status = Status.Not_sent;
+        //                throw new SmtpException("email not sent", e);
+        //            }
+        //            sendedCount++;
+        //        }
+        //    }
+
+        //    return await _sendingRepository.Get();
+        //}
     }
 }
