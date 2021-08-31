@@ -7,5 +7,7 @@ namespace Mailer.Models
 {
     public class Letter
     {
+        public string Subject { get; set; }
+        public string Body { get; set; }
     }
 }

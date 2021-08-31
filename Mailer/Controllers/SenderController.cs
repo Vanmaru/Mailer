@@ -41,6 +41,23 @@ namespace Mailer.Controllers
             }
             return "Logged in";
         }
+        Letter letter = new();
+        [HttpGet("{Message}")]
+        public string GetMessage(string messageText, string messageSubject)
+        {
+            Letter t = new();
+            try
+            {
+                t.Subject = messageSubject;
+                t.Body = messageText;
+            }
+            catch (Exception e)
+            {
+                return e.Message;
+            }
+            letter = t;
+            return "Message is ready.";
+        }
         [HttpGet]
         public async Task<IEnumerable<SendStatus>> GetSendingInfo()
         {
@@ -52,8 +69,46 @@ namespace Mailer.Controllers
             return await _sendingRepository.Get(id);
         }
         [HttpPost]
-        public async Task<ActionResult<SendStatus>> PostSending([FromBody]SendStatus sendStatus)
+        public async Task<ActionResult<SendStatus>> PostSend([FromBody] SendStatus sendStatus, string messageText, string messageSubject)
         {
+            var smtp = new SmtpClient
+            {
+                Host = "smtp.gmail.com",
+                Port = 587,
+                EnableSsl = true,
+                DeliveryMethod = SmtpDeliveryMethod.Network,
+                Credentials = sender,
+                Timeout = 20000
+            };
+            using (SendingContext db = new())
+            {
+                MailAddress toAddress = new(sendStatus.Recipient);
+                MailMessage message = new(senderAddress, toAddress)
+                {
+                    Subject = messageSubject,
+                    Body = messageText
+                };
+                bool res = true;
+                //sendStatus.Id = (from mails in db.Sendings select Count(sendStatus);
+                sendStatus.Result = res;
+                sendStatus.Recipient = toAddress.Address;
+
+                db.Sendings.Add(sendStatus);
+                db.SaveChanges();
+                //sendStatus.Status = Status.Sending;
+                try
+                {
+                    smtp.Send(message);
+                    //sendStatus.Status = Status.Sended;
+                }
+                catch (Exception e)
+                {
+                    res = false;
+                    //sendStatus.Status = Status.Not_sent;
+                    throw new SmtpException("email not sent", e);
+                }
+            }
+
             var newSending = await _sendingRepository.Create(sendStatus);
             return CreatedAtAction(nameof(GetSendingInfo), new { id = newSending.Id }, newSending);
         }
@@ -80,7 +135,7 @@ namespace Mailer.Controllers
         //        Credentials = sender,
         //        Timeout = 20000
         //    };
-            
+
         //    using (SendingContext db = new())
         //    {
         //        foreach (var item in addresses)
